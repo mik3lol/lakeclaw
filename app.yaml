@@ -1,0 +1,18 @@
+command: 
+  ["sh", "entrypoint.sh"]
+
+env:
+  - name: DATABRICKS_TOKEN
+    valueFrom: databricks-token
+  - name: GATEWAY_TOKEN
+    valueFrom: gateway-passphrase
+  - name: TELEGRAM_BOT_TOKEN
+    valueFrom: telegram-bot-token
+  - name: TELEGRAM_ALLOWED_USER_ID
+    value: "6509423016"
+  - name: MY_UC_VOLUME_PATH
+    valueFrom: lakeclaw-volume
+  - name: OPENCLAW_CONFIG_PATH
+    value: "/app/python/source_code/openclaw.json"
+  - name: OPENCLAW_STATE_DIR
+    value: "/home/app/.openclaw"

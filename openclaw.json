@@ -1,0 +1,55 @@
+{
+  "models": {
+    "providers": {
+      "databricks-openai": {
+        "baseUrl": "https://${DATABRICKS_WORKSPACE_ID}.ai-gateway.cloud.databricks.com/openai/v1",
+        "apiKey": "${DATABRICKS_TOKEN}  ",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "databricks-gpt-5-4",
+            "name": "GPT 5.4"
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "databricks-openai/databricks-gpt-5-4"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["${TELEGRAM_ALLOWED_USER_ID}"],
+      "groupPolicy": "open"
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "trustedProxies": ["0.0.0.0/0"],
+    "auth": {
+      "mode": "token",
+      "token": "${GATEWAY_TOKEN}"
+    },
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true
+    }
+  },
+  "skills": {
+    "load": {
+      "extraDirs": ["${OPENCLAW_STATE_DIR}/workspace/skills"]
+    },
+    "entries": {
+      "databricks-unity-catalog": { "enabled": true }
+    }
+  }
+}

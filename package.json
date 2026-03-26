@@ -1,0 +1,10 @@
+{
+  "name": "lakeclaw-databricks-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "openclaw": "latest"
+  },
+  "scripts": {
+    "start": "./node_modules/.bin/openclaw gateway run --port $DATABRICKS_APP_PORT --bind lan"
+  }
+}
