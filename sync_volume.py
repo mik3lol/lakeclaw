@@ -1,8 +1,6 @@
 import os
-import io
 import sys
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.core import Config
 from pathlib import Path
 
 # Config
@@ -61,13 +59,16 @@ def push_to_volume(w):
     print(f"--- Push Complete ---")
 
 if __name__ == "__main__":
-    # Explicitly use OAuth (service principal) to avoid conflict with PAT
-    cfg = Config(
-        host=os.getenv("DATABRICKS_HOST"),
-        client_id=os.getenv("DATABRICKS_CLIENT_ID"),
-        client_secret=os.getenv("DATABRICKS_CLIENT_SECRET"),
-    )
-    client = WorkspaceClient(config=cfg)
+    # The App runtime auto-injects OAuth credentials (CLIENT_ID/SECRET) alongside
+    # the PAT from Databricks secrets. The SDK refuses multiple auth methods.
+    # Hide the PAT so the SDK authenticates with OAuth only.
+    saved_token = os.environ.pop("DATABRICKS_TOKEN", None)
+    try:
+        client = WorkspaceClient()
+    finally:
+        if saved_token is not None:
+            os.environ["DATABRICKS_TOKEN"] = saved_token
+
     if len(sys.argv) > 1 and sys.argv[1] == "--push":
         push_to_volume(client)
     else:
