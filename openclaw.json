@@ -3,7 +3,7 @@
     "providers": {
       "databricks-openai": {
         "baseUrl": "https://${DATABRICKS_WORKSPACE_ID}.ai-gateway.cloud.databricks.com/openai/v1",
-        "apiKey": "${DATABRICKS_TOKEN}  ",
+        "apiKey": "${DATABRICKS_TOKEN}",
         "api": "openai-responses",
         "models": [
           {

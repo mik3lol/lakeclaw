@@ -2,6 +2,7 @@ import os
 import io
 import sys
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from pathlib import Path
 
 # Config
@@ -60,7 +61,13 @@ def push_to_volume(w):
     print(f"--- Push Complete ---")
 
 if __name__ == "__main__":
-    client = WorkspaceClient()
+    # Explicitly use OAuth (service principal) to avoid conflict with PAT
+    cfg = Config(
+        host=os.getenv("DATABRICKS_HOST"),
+        client_id=os.getenv("DATABRICKS_CLIENT_ID"),
+        client_secret=os.getenv("DATABRICKS_CLIENT_SECRET"),
+    )
+    client = WorkspaceClient(config=cfg)
     if len(sys.argv) > 1 and sys.argv[1] == "--push":
         push_to_volume(client)
     else:

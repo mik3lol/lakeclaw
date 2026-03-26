@@ -6,16 +6,32 @@ LakeClaw was built to fill this gap. By porting the [OpenClaw](https://github.co
 
 ## Architecture
 
-```
-Telegram ──> Databricks App (LakeClaw Gateway)
-                 │
-                 ├── Databricks AI Gateway (OpenAI-compatible API; default: GPT 5.4)
-                 │      (workspace URL uses ${DATABRICKS_WORKSPACE_ID}; PAT in DATABRICKS_TOKEN)
-                 │
-                 └── Unity Catalog Volume (soul, memories, sessions via MY_UC_VOLUME_PATH)
+There are **two parallel paths**: (1) chat traffic goes through the gateway to the model, and (2) agent state is copied between the container disk and a UC volume so restarts do not wipe memory.
+
+```mermaid
+flowchart TB
+  TG[Telegram]
+
+  subgraph App["LakeClaw Databricks App"]
+    GW[OpenClaw gateway]
+    DISK["Local state<br/>/home/app/.openclaw"]
+    SYNC["sync_volume.py"]
+
+    SYNC -->|"pull on start"| DISK
+    DISK --> GW
+  end
+
+  AIGW["Databricks AI Gateway<br/>(OpenAI-compatible, e.g. GPT 5.4)"]
+  VOL[("Unity Catalog volume<br/>(persistent .openclaw files)")]
+
+  TG <-->|"bot API"| GW
+  GW -->|"inference · PAT<br/>DATABRICKS_TOKEN"| AIGW
+  SYNC <-->|"Files API · OAuth<br/>pull on boot · push on heartbeat / exit"| VOL
 ```
 
-The app runs the OpenClaw gateway (`npm start` → `openclaw gateway run`) inside a Databricks App container, binding to `DATABRICKS_APP_PORT`. `entrypoint.sh` sets `OPENCLAW_HOME` / `OPENCLAW_STATE_DIR` under `/home/app`, symlinks bundled `openclaw.json` into the state dir, then runs `sync_volume.py` before boot. The same script pushes state back on shutdown (signal trap) and on a periodic heartbeat.
+**Startup order:** `entrypoint.sh` creates `OPENCLAW_STATE_DIR`, symlinks `openclaw.json`, runs **`sync_volume.py` pull** from the volume, then starts **`npm start`** (`openclaw gateway run` on `DATABRICKS_APP_PORT`). Pushes run on a **heartbeat** and on **SIGTERM/SIGINT**.
+
+**Auth split:** OpenClaw uses the PAT in `DATABRICKS_TOKEN` (secret `databricks-token`) for Databricks AI Gateway. Volume upload/download in `sync_volume.py` uses a separate `WorkspaceClient` configured with **OAuth** (`DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) so Files API calls do not rely on the PAT path.
 
 **Bundled behavior (see `openclaw.json`):** default model is `databricks-openai/databricks-gpt-5-4`; Telegram uses an allowlist (`TELEGRAM_ALLOWED_USER_ID`); gateway auth is token-based (`GATEWAY_TOKEN`); the `databricks-unity-catalog` skill is enabled; extra skills can be loaded from `.openclaw/workspace/skills` on the volume after sync.
 
@@ -28,7 +44,7 @@ lakeclaw/
 ├── app.yaml                    # App command (entrypoint.sh) and env → secret/volume mapping
 ├── openclaw.json               # OpenClaw config (models, Telegram, gateway auth, skills)
 ├── entrypoint.sh               # Sets OPENCLAW_* paths, initial pull, heartbeat, npm start
-├── sync_volume.py              # Pull tree from volume → /home/app; push selected files back
+├── sync_volume.py              # UC Files API sync via OAuth WorkspaceClient; push/pull .openclaw state
 └── package.json                # openclaw CLI; start script uses DATABRICKS_APP_PORT
 ```
 
@@ -48,7 +64,6 @@ Create the secret scope and populate the required secrets. This is a one-time se
 databricks secrets create-scope lakeclaw
 databricks secrets put-secret lakeclaw gateway-passphrase
 databricks secrets put-secret lakeclaw telegram-bot-token
-databricks secrets put-secret lakeclaw openai-key
 databricks secrets put-secret lakeclaw databricks-token
 ```
 
@@ -56,7 +71,9 @@ databricks secrets put-secret lakeclaw databricks-token
 | ----------------------- | ---------------------- |
 | `gateway-passphrase`    | `GATEWAY_TOKEN` — gateway HTTP auth (`openclaw.json` `gateway.auth.token`) |
 | `telegram-bot-token`    | `TELEGRAM_BOT_TOKEN` |
-| `databricks-token`      | `DATABRICKS_TOKEN` — Workspace API client in `sync_volume.py` and AI Gateway auth for the default model |
+| `databricks-token`      | `DATABRICKS_TOKEN` — Databricks AI Gateway / OpenClaw model provider (`openclaw.json`); not used by `sync_volume.py` |
+
+**Volume sync env vars:** `sync_volume.py` reads `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, and `DATABRICKS_CLIENT_SECRET` for OAuth. Databricks Apps often provide these for the app’s service principal; if they are missing, configure them (or equivalent app identity) so the Files API can read and write the bound UC volume. Grant that identity **WRITE** on the volume in Unity Catalog.
 
 **Telegram allowlist:** `openclaw.json` sets `dmPolicy` to `allowlist` and reads `TELEGRAM_ALLOWED_USER_ID`. That value is set in `app.yaml` (currently a literal); change it there (or switch to a secret) for your Telegram user ID.
 
@@ -127,7 +144,7 @@ OpenClaw state lives under `/home/app/.openclaw` (`OPENCLAW_STATE_DIR`). The vol
 
 **Push rules:** uploads files under `.openclaw` with extensions `.md`, `.json`, `.jsonl`, `.db`, `.key`, `.yaml`. Skips `openclaw.json` and symlinks (the bundled config is symlinked from `/app/python/source_code` and should not be written back as content).
 
-**Client:** `WorkspaceClient()` from `databricks-sdk` uses standard Databricks credential resolution; this app supplies `DATABRICKS_TOKEN` for Files API sync and for the bundled AI Gateway config.
+**Client:** `sync_volume.py` builds `WorkspaceClient(config=Config(host=..., client_id=..., client_secret=...))` from `databricks.sdk.core.Config` so volume operations use **OAuth machine-to-machine** credentials. OpenClaw itself still uses `DATABRICKS_TOKEN` for the AI Gateway OpenAI-compatible API.
 
 ## Targets
 
