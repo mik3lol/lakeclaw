@@ -91,6 +91,11 @@ def _rewrite_upstream_path(path: str) -> str:
     if path.startswith(g_short) and not path.startswith("/serving-endpoints/gemini/v1beta"):
         path = "/serving-endpoints/gemini/v1beta/models" + path[len(g_short) :]
 
+    # If baseUrl already included v1beta and the client adds another, collapse.
+    dup = "/serving-endpoints/gemini/v1beta/v1beta"
+    while dup in path:
+        path = path.replace(dup, "/serving-endpoints/gemini/v1beta", 1)
+
     return path
 
 

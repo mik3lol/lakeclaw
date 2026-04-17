@@ -36,7 +36,7 @@
         ]
       },
       "databricks-gemini": {
-        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/serving-endpoints/gemini",
+        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/serving-endpoints/gemini/v1beta",
         "apiKey": "${AI_GATEWAY_PROXY_LOCAL_KEY}",
         "api": "google-generative-ai",
         "models": [
