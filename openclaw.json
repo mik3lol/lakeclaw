@@ -2,7 +2,7 @@
   "models": {
     "providers": {
       "databricks-openai": {
-        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/openai/v1",
+        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/serving-endpoints",
         "apiKey": "${AI_GATEWAY_PROXY_LOCAL_KEY}",
         "api": "openai-responses",
         "models": [

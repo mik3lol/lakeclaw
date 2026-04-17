@@ -1,15 +1,21 @@
 """
-Local OpenAI-compatible reverse proxy for Databricks AI Gateway.
+Local reverse proxy for Databricks foundation APIs (OAuth M2M).
 
-OpenClaw sends a static Bearer (AI_GATEWAY_PROXY_LOCAL_KEY) to this process;
-this process exchanges DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET for
-OAuth M2M access tokens (workspace /oidc/v1/token), refreshes before expiry,
-and forwards to AI Gateway with Authorization: Bearer <access_token>.
+OpenClaw sends a static Bearer (AI_GATEWAY_PROXY_LOCAL_KEY); this process
+exchanges DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET for workspace OAuth
+tokens (/oidc/v1/token), refreshes before expiry, and forwards with
+Authorization: Bearer <access_token>.
 
-Listens on 127.0.0.1 only. OpenClaw baseUrl: http://127.0.0.1:<port>/openai/v1
+Upstream routing (same loopback port):
+- Paths under /serving-endpoints → https://<DATABRICKS_HOST> (pay-per-token
+  OpenAI Responses API, etc.). OpenAI clients often call .../v1/responses;
+  Databricks REST uses .../responses — we rewrite that prefix when forwarding.
+- Other paths (e.g. /openai/v1, /anthropic) → https://<WORKSPACE_ID>.ai-gateway...
 
-OpenClaw is configured with transport sse for this model so this HTTP-only
-proxy does not need WebSocket termination.
+Listens on 127.0.0.1 only. Configure OpenClaw baseUrl under the matching prefix.
+
+OpenClaw uses transport sse where configured so this HTTP-only proxy avoids
+WebSocket termination.
 """
 
 from __future__ import annotations
@@ -48,9 +54,31 @@ def _normalize_host(raw: str) -> str:
     return raw
 
 
-def _upstream_origin() -> str:
+def _ai_gateway_origin() -> str:
     wsid = os.environ["DATABRICKS_WORKSPACE_ID"].strip()
     return f"https://{wsid}.ai-gateway.cloud.databricks.com"
+
+
+def _workspace_origin() -> str:
+    host = _normalize_host(os.environ["DATABRICKS_HOST"])
+    return f"https://{host}"
+
+
+def _upstream_origin_for_path(path: str) -> str:
+    """Pay-per-token serving uses workspace host; AI Gateway uses workspace-id subdomain."""
+    if path.startswith("/serving-endpoints"):
+        return _workspace_origin()
+    return _ai_gateway_origin()
+
+
+def _rewrite_upstream_path(path: str) -> str:
+    """Databricks Responses REST is /serving-endpoints/responses (see Databricks OpenAI Responses docs)."""
+    prefix = "/serving-endpoints/v1/responses"
+    if path == prefix:
+        return "/serving-endpoints/responses"
+    if path.startswith(prefix + "/"):
+        return "/serving-endpoints/responses" + path[len(prefix) :]
+    return path
 
 
 class OAuthTokenCache:
@@ -152,8 +180,10 @@ async def proxy(request: Request) -> Response:
         return err
 
     client = _client()
-    origin = _upstream_origin()
-    url = origin + request.url.path
+    path = request.url.path
+    origin = _upstream_origin_for_path(path)
+    upstream_path = _rewrite_upstream_path(path) if path.startswith("/serving-endpoints") else path
+    url = origin + upstream_path
     if request.url.query:
         url = f"{url}?{request.url.query}"
 
