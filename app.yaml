@@ -4,7 +4,7 @@ command:
 env:
   - name: DATABRICKS_TOKEN
     valueFrom: databricks-token
-  - name: GATEWAY_TOKEN
+  - name: OPENCLAW_GATEWAY_TOKEN
     valueFrom: gateway-passphrase
   - name: TELEGRAM_BOT_TOKEN
     valueFrom: telegram-bot-token

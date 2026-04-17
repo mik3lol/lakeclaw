@@ -33,7 +33,7 @@ flowchart TB
 
 **Auth split:** OpenClaw uses the PAT in `DATABRICKS_TOKEN` (secret `databricks-token`) for Databricks AI Gateway. Volume upload/download in `sync_volume.py` uses a separate `WorkspaceClient` configured with **OAuth** (`DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) so Files API calls do not rely on the PAT path.
 
-**Bundled behavior (see `openclaw.json`):** default model is `databricks-openai/databricks-gpt-5-4`; Telegram uses an allowlist (`TELEGRAM_ALLOWED_USER_ID`); gateway auth is token-based (`GATEWAY_TOKEN`); the `databricks-unity-catalog` skill is enabled; extra skills can be loaded from `.openclaw/workspace/skills` on the volume after sync.
+**Bundled behavior (see `openclaw.json`):** default model is `databricks-openai/databricks-gpt-5-4`; Telegram uses an allowlist (`TELEGRAM_ALLOWED_USER_ID`); gateway auth is token-based (`OPENCLAW_GATEWAY_TOKEN`); the `databricks-unity-catalog` skill is enabled; extra skills can be loaded from `.openclaw/workspace/skills` on the volume after sync.
 
 ## Project Structure
 
@@ -69,7 +69,7 @@ databricks secrets put-secret lakeclaw databricks-token
 
 | Secret key (in scope)   | Injected as / used for |
 | ----------------------- | ---------------------- |
-| `gateway-passphrase`    | `GATEWAY_TOKEN` — gateway HTTP auth (`openclaw.json` `gateway.auth.token`) |
+| `gateway-passphrase`    | `OPENCLAW_GATEWAY_TOKEN` — gateway HTTP auth (`openclaw.json` `gateway.auth.token`) |
 | `telegram-bot-token`    | `TELEGRAM_BOT_TOKEN` |
 | `databricks-token`      | `DATABRICKS_TOKEN` — Databricks AI Gateway / OpenClaw model provider (`openclaw.json`); not used by `sync_volume.py` |
 

@@ -36,7 +36,7 @@
     "trustedProxies": ["0.0.0.0/0"],
     "auth": {
       "mode": "token",
-      "token": "${GATEWAY_TOKEN}"
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
     },
     "controlUi": {
       "dangerouslyAllowHostHeaderOriginFallback": true,
