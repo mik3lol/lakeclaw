@@ -1,18 +1,34 @@
 command: 
-  ["sh", "entrypoint.sh"]
+  ["sh", "app/entrypoint.sh"]
+
+# Secrets: gateway-passphrase, telegram-bot-token (Databricks secret scope; see README).
+# Volume: lakeclaw-volume → MY_UC_VOLUME_PATH (UC path from bundle).
+# Injected by the Apps runtime (do not set here): DATABRICKS_HOST, DATABRICKS_CLIENT_ID,
+# DATABRICKS_CLIENT_SECRET, DATABRICKS_WORKSPACE_ID, DATABRICKS_APP_PORT.
+# AI_GATEWAY_PROXY_LOCAL_KEY is generated in app/entrypoint.sh if unset.
 
 env:
-  - name: DATABRICKS_TOKEN
-    valueFrom: databricks-token
+  # OpenClaw layout (override only if you change paths in the container image)
+  - name: OPENCLAW_HOME
+    value: "/home/app"
+  - name: OPENCLAW_STATE_DIR
+    value: "/home/app/.openclaw"
+  - name: OPENCLAW_CONFIG_PATH
+    value: "/app/python/source_code/app/openclaw.json"
+
+  # Loopback OAuth proxy (OpenClaw → Databricks serving-endpoints / AI Gateway)
+  - name: AI_GATEWAY_PROXY_PORT
+    value: "18080"
+  - name: DATABRICKS_OAUTH_SCOPE
+    value: "all-apis"
+  - name: AI_GATEWAY_OAUTH_REFRESH_SKEW_SEC
+    value: "120"
+
   - name: OPENCLAW_GATEWAY_TOKEN
     valueFrom: gateway-passphrase
   - name: TELEGRAM_BOT_TOKEN
     valueFrom: telegram-bot-token
   - name: TELEGRAM_ALLOWED_USER_ID
-    value: "6509423016"
+    value: "YOUR_TELEGRAM_USER_ID"
   - name: MY_UC_VOLUME_PATH
     valueFrom: lakeclaw-volume
-  - name: OPENCLAW_CONFIG_PATH
-    value: "/app/python/source_code/openclaw.json"
-  - name: OPENCLAW_STATE_DIR
-    value: "/home/app/.openclaw"

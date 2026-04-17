@@ -1,10 +1,15 @@
 #!/bin/bash
 
+# Repo root inside the Databricks App container (bundle `source_code_path`)
+ROOT="/app/python/source_code"
+# All LakeClaw app code, config, and assets live here
+APP="$ROOT/app"
+
 # 1. SET THE ENVIRONMENT
 # We force LakeClaw to look in the /home/app directory for its runtime state.
-export OPENCLAW_HOME="/home/app"
-export OPENCLAW_STATE_DIR="/home/app/.openclaw"
-export OPENCLAW_CONFIG_PATH="/app/python/source_code/openclaw.json"
+export OPENCLAW_HOME="${OPENCLAW_HOME:-/home/app}"
+export OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/home/app/.openclaw}"
+export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-$APP/openclaw.json}"
 
 # OAuth → AI Gateway: OpenClaw uses loopback + static key; proxy attaches M2M Bearer.
 export AI_GATEWAY_PROXY_PORT="${AI_GATEWAY_PROXY_PORT:-18080}"
@@ -20,18 +25,18 @@ mkdir -p "$OPENCLAW_STATE_DIR/skills"
 # 3. LINK THE MASTER CONFIG
 # We symlink the 'source code' config into the 'runtime' directory.
 # This means LakeClaw sees it in both places, but you only maintain it in one.
-ln -sf /app/python/source_code/openclaw.json "$OPENCLAW_STATE_DIR/openclaw.json"
+ln -sf "$OPENCLAW_CONFIG_PATH" "$OPENCLAW_STATE_DIR/openclaw.json"
 
 # 4. INITIAL SYNC (VOLUME -> APP)
 # Pull the latest Soul, Memories, and Sessions from Unity Catalog before booting.
 echo "--- [INIT] Syncing State from Unity Catalog Volume ---"
-python sync_volume.py 
+python "$APP/sync_volume.py"
 
 # 5. DEFINE THE PERSISTENCE TRAP
 # If the Databricks App is stopped or redeployed, we trigger one last push.
 cleanup() {
     echo "--- [SHUTDOWN] Final Sync to Unity Catalog Volume ---"
-    python sync_volume.py --push
+    python "$APP/sync_volume.py" --push
     exit 0
 }
 trap cleanup SIGTERM SIGINT
@@ -42,13 +47,13 @@ trap cleanup SIGTERM SIGINT
   while true; do
     sleep 3600
     echo "--- [HEARTBEAT] Periodic Sync to Volume ---"
-    python sync_volume.py --push
+    python "$APP/sync_volume.py" --push
   done
 ) &
 
 # 7. AI GATEWAY PROXY (OAuth M2M → upstream OpenAI-compatible API)
 echo "--- [START] Launching AI Gateway OAuth proxy on 127.0.0.1:${AI_GATEWAY_PROXY_PORT} ---"
-python ai_gateway_proxy.py &
+python "$APP/ai_gateway_proxy.py" &
 PROXY_PID=$!
 for _ in $(seq 1 50); do
   if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/healthz', timeout=2)" 2>/dev/null; then
@@ -65,4 +70,4 @@ done
 # 8. BOOT LAKECLAW
 # We use 'npm start' which will now inherit the OPENCLAW_CONFIG_PATH.
 echo "--- [START] Launching LakeClaw Gateway ---"
-npm start
+cd "$ROOT" && npm start

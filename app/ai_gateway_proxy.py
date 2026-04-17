@@ -13,8 +13,9 @@ Upstream routing (same loopback port):
   .../v1/responses; Databricks REST uses .../responses — we rewrite that prefix
   when forwarding.   Gemini clients may call .../gemini/models/... without ``v1beta``;
   Databricks expects .../gemini/v1beta/models/... — we insert ``/v1beta`` when missing.
-  If the client uses ``:streamGenerateContent`` (404 on some workspaces), we rewrite to
-  ``:generateContent`` and drop ``alt=sse`` from the query.
+  ``GEMINI_FORWARD_STREAMING_RPC`` in this module is ``True``: ``:streamGenerateContent`` and
+  ``alt=sse`` are forwarded as-is for Databricks-native SSE. If you need unary downgrade instead,
+  set it to ``False``. Drop ``alt=sse`` from the query only when that downgrade runs.
 - Other paths (e.g. /openai/v1, /anthropic) → https://<WORKSPACE_ID>.ai-gateway...
 
 Listens on 127.0.0.1 only. Configure OpenClaw baseUrl under the matching prefix.
@@ -27,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from typing import AsyncIterator
 from urllib.parse import parse_qsl, urlencode
@@ -52,6 +54,9 @@ HOP_BY_HOP = frozenset(
 
 # Strip client credentials so only workspace OAuth reaches Databricks.
 _STRIP_CLIENT_AUTH = frozenset({"authorization", "x-api-key", "x-goog-api-key"})
+
+# When True, do not rewrite :streamGenerateContent → :generateContent for Gemini on serving-endpoints.
+GEMINI_FORWARD_STREAMING_RPC = True
 
 
 def _normalize_host(raw: str) -> str:
@@ -105,14 +110,22 @@ def _rewrite_upstream_path(path: str) -> tuple[str, bool]:
     while dup in path:
         path = path.replace(dup, "/serving-endpoints/gemini/v1beta", 1)
 
-    # Gemini streaming RPC: Google SDK uses :streamGenerateContent; Databricks REST examples use
-    # :generateContent — rewrite to avoid 404 on pay-per-token serving.
-    if "/serving-endpoints/gemini/" in path:
-        if "%3AstreamGenerateContent" in path:
-            path = path.replace("%3AstreamGenerateContent", "%3AgenerateContent", 1)
-            gemini_stream_rpc_downgraded = True
-        elif ":streamGenerateContent" in path:
-            path = path.replace(":streamGenerateContent", ":generateContent", 1)
+    # Gemini: Databricks docs use a literal colon before the RPC name (e.g. ``...pro:generateContent``).
+    # Some clients send ``%3A``; forwarding percent-encoded colons can 404 on serving.
+    if "/serving-endpoints/gemini/" in path and "%3A" in path:
+        path = path.replace("%3A", ":")
+
+    # Gemini streaming RPC: optional rewrite to unary (see module docstring / GEMINI_FORWARD_STREAMING_RPC).
+    if "/serving-endpoints/gemini/" in path and not GEMINI_FORWARD_STREAMING_RPC:
+        path2, n = re.subn(
+            r":streamGenerateContent",
+            ":generateContent",
+            path,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        if n:
+            path = path2
             gemini_stream_rpc_downgraded = True
 
     return path, gemini_stream_rpc_downgraded

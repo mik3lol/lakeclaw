@@ -31,13 +31,6 @@ resources:
             key: telegram-bot-token
             permission: READ
 
-        # Databricks PAT for authenticating with workspace APIs
-        - name: databricks-token
-          secret:
-            scope: ${var.secret_scope}
-            key: databricks-token
-            permission: READ
-
         # UC Volume for persisting state (soul, memories, sessions)
         - name: lakeclaw-volume
           uc_securable:
