@@ -2,8 +2,8 @@
   "models": {
     "providers": {
       "databricks-openai": {
-        "baseUrl": "https://${DATABRICKS_WORKSPACE_ID}.ai-gateway.cloud.databricks.com/openai/v1",
-        "apiKey": "${DATABRICKS_TOKEN}",
+        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/openai/v1",
+        "apiKey": "${AI_GATEWAY_PROXY_LOCAL_KEY}",
         "api": "openai-responses",
         "models": [
           {
@@ -18,6 +18,13 @@
     "defaults": {
       "model": {
         "primary": "databricks-openai/databricks-gpt-5-4"
+      },
+      "models": {
+        "databricks-openai/databricks-gpt-5-4": {
+          "params": {
+            "transport": "sse"
+          }
+        }
       }
     }
   },
