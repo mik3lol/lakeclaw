@@ -1,7 +1,8 @@
 """
 Local reverse proxy for Databricks foundation APIs (OAuth M2M).
 
-OpenClaw sends a static Bearer (AI_GATEWAY_PROXY_LOCAL_KEY); this process
+OpenClaw sends the local key as ``Authorization: Bearer``, ``x-api-key`` (Anthropic),
+or ``x-goog-api-key`` (Gemini), all matched against ``AI_GATEWAY_PROXY_LOCAL_KEY``; this process
 exchanges DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET for workspace OAuth
 tokens (/oidc/v1/token), refreshes before expiry, and forwards with
 Authorization: Bearer <access_token>.
@@ -44,6 +45,9 @@ HOP_BY_HOP = frozenset(
         "upgrade",
     }
 )
+
+# Strip client credentials so only workspace OAuth reaches Databricks.
+_STRIP_CLIENT_AUTH = frozenset({"authorization", "x-api-key", "x-goog-api-key"})
 
 
 def _normalize_host(raw: str) -> str:
@@ -142,12 +146,27 @@ def _local_key() -> str | None:
     return v if v else None
 
 
+def _local_auth_ok(request: Request, key: str) -> bool:
+    """OpenAI-style Bearer, Anthropic x-api-key, Gemini x-goog-api-key."""
+    auth = (request.headers.get("authorization") or "").strip()
+    if auth:
+        if auth == key:
+            return True
+        pfx = "bearer "
+        if auth.lower().startswith(pfx) and auth[len(pfx) :].strip() == key:
+            return True
+    if (request.headers.get("x-api-key") or "").strip() == key:
+        return True
+    if (request.headers.get("x-goog-api-key") or "").strip() == key:
+        return True
+    return False
+
+
 def _check_local_auth(request: Request) -> Response | None:
     key = _local_key()
     if not key:
         return None
-    got = request.headers.get("authorization", "")
-    if got != f"Bearer {key}":
+    if not _local_auth_ok(request, key):
         return Response("proxy auth required", status_code=401)
     return None
 
@@ -156,7 +175,7 @@ def _forward_headers(request: Request, bearer: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for name, value in request.headers.items():
         ln = name.lower()
-        if ln in HOP_BY_HOP or ln in ("host", "content-length", "authorization"):
+        if ln in HOP_BY_HOP or ln in ("host", "content-length") or ln in _STRIP_CLIENT_AUTH:
             continue
         out[name] = value
     out["Authorization"] = f"Bearer {bearer}"
