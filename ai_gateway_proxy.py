@@ -8,8 +8,9 @@ Authorization: Bearer <access_token>.
 
 Upstream routing (same loopback port):
 - Paths under /serving-endpoints → https://<DATABRICKS_HOST> (pay-per-token
-  OpenAI Responses API, etc.). OpenAI clients often call .../v1/responses;
-  Databricks REST uses .../responses — we rewrite that prefix when forwarding.
+  OpenAI Responses, Gemini /gemini/..., etc.). OpenAI Responses clients may use
+  .../v1/responses; Databricks REST uses .../responses — we rewrite that prefix
+  when forwarding.
 - Other paths (e.g. /openai/v1, /anthropic) → https://<WORKSPACE_ID>.ai-gateway...
 
 Listens on 127.0.0.1 only. Configure OpenClaw baseUrl under the matching prefix.
