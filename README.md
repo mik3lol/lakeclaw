@@ -35,7 +35,7 @@ flowchart TB
 
 **Auth split:** OpenClaw calls **Databricks AI Gateway** through **`ai_gateway_proxy.py`** on loopback: OpenClaw sends a static `AI_GATEWAY_PROXY_LOCAL_KEY`; the proxy exchanges **`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`** for workspace OAuth tokens (`/oidc/v1/token`), refreshes before expiry, and forwards with `Authorization: Bearer <access_token>`. Volume upload/download in `sync_volume.py` uses the same app OAuth via `WorkspaceClient` (it temporarily unsets `DATABRICKS_TOKEN` while constructing the client so the SDK does not see conflicting auth).
 
-**Bundled behavior (see `openclaw.json`):** default model is `databricks-openai/databricks-gpt-5-4`; Telegram uses an allowlist (`TELEGRAM_ALLOWED_USER_ID`); gateway auth is token-based (`OPENCLAW_GATEWAY_TOKEN`); the `databricks-unity-catalog` skill is enabled; extra skills can be loaded from `.openclaw/workspace/skills` on the volume after sync.
+**Bundled behavior (see `openclaw.json`):** default model is `databricks-openai/databricks-gpt-5-4`; additional **Anthropic Messages** pay-per-token models are available under `databricks-anthropic/*` (same loopback proxy, `api: anthropic-messages`, path `/anthropic`). Telegram uses an allowlist (`TELEGRAM_ALLOWED_USER_ID`); gateway auth is token-based (`OPENCLAW_GATEWAY_TOKEN`); the `databricks-unity-catalog` skill is enabled; extra skills can be loaded from `.openclaw/workspace/skills` on the volume after sync.
 
 ## Project Structure
 

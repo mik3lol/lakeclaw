@@ -11,6 +11,29 @@
             "name": "GPT 5.4"
           }
         ]
+      },
+      "databricks-anthropic": {
+        "baseUrl": "http://127.0.0.1:${AI_GATEWAY_PROXY_PORT}/anthropic",
+        "apiKey": "${AI_GATEWAY_PROXY_LOCAL_KEY}",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "databricks-claude-opus-4-6",
+            "name": "Claude Opus 4.6 (Databricks)"
+          },
+          {
+            "id": "databricks-claude-opus-4-7",
+            "name": "Claude Opus 4.7 (Databricks)"
+          },
+          {
+            "id": "databricks-claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6 (Databricks)"
+          },
+          {
+            "id": "databricks-claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5 (Databricks)"
+          }
+        ]
       }
     }
   },
@@ -21,6 +44,26 @@
       },
       "models": {
         "databricks-openai/databricks-gpt-5-4": {
+          "params": {
+            "transport": "sse"
+          }
+        },
+        "databricks-anthropic/databricks-claude-opus-4-6": {
+          "params": {
+            "transport": "sse"
+          }
+        },
+        "databricks-anthropic/databricks-claude-opus-4-7": {
+          "params": {
+            "transport": "sse"
+          }
+        },
+        "databricks-anthropic/databricks-claude-sonnet-4-6": {
+          "params": {
+            "transport": "sse"
+          }
+        },
+        "databricks-anthropic/databricks-claude-sonnet-4-5": {
           "params": {
             "transport": "sse"
           }
