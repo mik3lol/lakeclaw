@@ -11,8 +11,10 @@ Upstream routing (same loopback port):
 - Paths under /serving-endpoints → https://<DATABRICKS_HOST> (pay-per-token
   OpenAI Responses, Gemini /gemini/..., etc.). OpenAI Responses clients may use
   .../v1/responses; Databricks REST uses .../responses — we rewrite that prefix
-  when forwarding. Gemini clients may call .../gemini/models/... without ``v1beta``;
+  when forwarding.   Gemini clients may call .../gemini/models/... without ``v1beta``;
   Databricks expects .../gemini/v1beta/models/... — we insert ``/v1beta`` when missing.
+  If the client uses ``:streamGenerateContent`` (404 on some workspaces), we rewrite to
+  ``:generateContent`` and drop ``alt=sse`` from the query.
 - Other paths (e.g. /openai/v1, /anthropic) → https://<WORKSPACE_ID>.ai-gateway...
 
 Listens on 127.0.0.1 only. Configure OpenClaw baseUrl under the matching prefix.
@@ -27,6 +29,7 @@ import asyncio
 import os
 import time
 from typing import AsyncIterator
+from urllib.parse import parse_qsl, urlencode
 
 import httpx
 from starlette.applications import Starlette
@@ -77,8 +80,14 @@ def _upstream_origin_for_path(path: str) -> str:
     return _ai_gateway_origin()
 
 
-def _rewrite_upstream_path(path: str) -> str:
-    """Normalize paths for Databricks pay-per-token REST (OpenAI Responses, Gemini v1beta)."""
+def _rewrite_upstream_path(path: str) -> tuple[str, bool]:
+    """Normalize paths for Databricks pay-per-token REST.
+
+    Returns (upstream_path, gemini_stream_rpc_downgraded) — when True, caller
+    should drop ``alt=sse`` from the query (Databricks docs show ``generateContent``;
+    ``:streamGenerateContent`` often 404s on serving).
+    """
+    gemini_stream_rpc_downgraded = False
     prefix = "/serving-endpoints/v1/responses"
     if path == prefix:
         path = "/serving-endpoints/responses"
@@ -96,7 +105,17 @@ def _rewrite_upstream_path(path: str) -> str:
     while dup in path:
         path = path.replace(dup, "/serving-endpoints/gemini/v1beta", 1)
 
-    return path
+    # Gemini streaming RPC: Google SDK uses :streamGenerateContent; Databricks REST examples use
+    # :generateContent — rewrite to avoid 404 on pay-per-token serving.
+    if "/serving-endpoints/gemini/" in path:
+        if "%3AstreamGenerateContent" in path:
+            path = path.replace("%3AstreamGenerateContent", "%3AgenerateContent", 1)
+            gemini_stream_rpc_downgraded = True
+        elif ":streamGenerateContent" in path:
+            path = path.replace(":streamGenerateContent", ":generateContent", 1)
+            gemini_stream_rpc_downgraded = True
+
+    return path, gemini_stream_rpc_downgraded
 
 
 class OAuthTokenCache:
@@ -215,10 +234,23 @@ async def proxy(request: Request) -> Response:
     client = _client()
     path = request.url.path
     origin = _upstream_origin_for_path(path)
-    upstream_path = _rewrite_upstream_path(path) if path.startswith("/serving-endpoints") else path
+    if path.startswith("/serving-endpoints"):
+        upstream_path, gemini_rpc_downgrade = _rewrite_upstream_path(path)
+    else:
+        upstream_path, gemini_rpc_downgrade = path, False
+
+    q = request.url.query
+    if gemini_rpc_downgrade and q:
+        pairs = [
+            (k, v)
+            for k, v in parse_qsl(q, keep_blank_values=True)
+            if not (k == "alt" and v == "sse")
+        ]
+        q = urlencode(pairs) if pairs else ""
+
     url = origin + upstream_path
-    if request.url.query:
-        url = f"{url}?{request.url.query}"
+    if q:
+        url = f"{url}?{q}"
 
     body: bytes | None = None
     if request.method in ("POST", "PUT", "PATCH"):
