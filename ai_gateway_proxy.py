@@ -11,7 +11,8 @@ Upstream routing (same loopback port):
 - Paths under /serving-endpoints → https://<DATABRICKS_HOST> (pay-per-token
   OpenAI Responses, Gemini /gemini/..., etc.). OpenAI Responses clients may use
   .../v1/responses; Databricks REST uses .../responses — we rewrite that prefix
-  when forwarding.
+  when forwarding. Gemini clients may call .../gemini/models/... without ``v1beta``;
+  Databricks expects .../gemini/v1beta/models/... — we insert ``/v1beta`` when missing.
 - Other paths (e.g. /openai/v1, /anthropic) → https://<WORKSPACE_ID>.ai-gateway...
 
 Listens on 127.0.0.1 only. Configure OpenClaw baseUrl under the matching prefix.
@@ -77,12 +78,19 @@ def _upstream_origin_for_path(path: str) -> str:
 
 
 def _rewrite_upstream_path(path: str) -> str:
-    """Databricks Responses REST is /serving-endpoints/responses (see Databricks OpenAI Responses docs)."""
+    """Normalize paths for Databricks pay-per-token REST (OpenAI Responses, Gemini v1beta)."""
     prefix = "/serving-endpoints/v1/responses"
     if path == prefix:
-        return "/serving-endpoints/responses"
-    if path.startswith(prefix + "/"):
-        return "/serving-endpoints/responses" + path[len(prefix) :]
+        path = "/serving-endpoints/responses"
+    elif path.startswith(prefix + "/"):
+        path = "/serving-endpoints/responses" + path[len(prefix) :]
+
+    # Gemini: Databricks uses .../gemini/v1beta/models/...:generateContent (see Databricks Gemini API).
+    # Some clients call .../gemini/models/... without v1beta → 404.
+    g_short = "/serving-endpoints/gemini/models"
+    if path.startswith(g_short) and not path.startswith("/serving-endpoints/gemini/v1beta"):
+        path = "/serving-endpoints/gemini/v1beta/models" + path[len(g_short) :]
+
     return path
 
 
