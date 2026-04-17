@@ -75,56 +75,67 @@
       },
       "models": {
         "databricks-openai/databricks-gpt-5-4": {
+          "alias": "GPT 5.4",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-anthropic/databricks-claude-opus-4-6": {
+          "alias": "Claude Opus 4.6",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-anthropic/databricks-claude-opus-4-7": {
+          "alias": "Claude Opus 4.7",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-anthropic/databricks-claude-sonnet-4-6": {
+          "alias": "Claude Sonnet 4.6",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-anthropic/databricks-claude-sonnet-4-5": {
+          "alias": "Claude Sonnet 4.5",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-3-1-pro": {
+          "alias": "Gemini 3.1 Pro",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-3-1-flash-lite": {
+          "alias": "Gemini 3.1 Flash Lite",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-3-pro": {
+          "alias": "Gemini 3 Pro",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-3-flash": {
+          "alias": "Gemini 3 Flash",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-2-5-pro": {
+          "alias": "Gemini 2.5 Pro",
           "params": {
             "transport": "sse"
           }
         },
         "databricks-gemini/databricks-gemini-2-5-flash": {
+          "alias": "Gemini 2.5 Flash",
           "params": {
             "transport": "sse"
           }
