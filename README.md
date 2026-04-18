@@ -6,7 +6,7 @@
 
 ## Architecture
 
-Chat flows through the OpenClaw gateway to **`app/ai_gateway_proxy.py`** (loopback); model traffic uses OAuth M2M to **`/serving-endpoints`** and **AI Gateway** (`/anthropic`). **`app/sync_volume.py`** pulls OpenClaw state from a UC volume on boot and pushes on a timer and shutdown so restarts do not wipe memory.
+Chat flows through the OpenClaw gateway to **`app/ai_gateway_proxy.py`** (loopback); model traffic uses OAuth M2M to **`/serving-endpoints`** and **AI Gateway** (`/anthropic`). **`app/sync_volume.py`** uses the UC Files API (OAuth): on boot it **pulls** the volume into `/home/app`, then **seeds** a local manifest so uploads know the post-pull baseline. **Push** runs on a timer and on shutdown and uploads **only files whose content changed** (fingerprints in `/home/app/.lakeclaw_push_manifest.json`). If `MY_UC_VOLUME_PATH` is unset, pull is skipped and the manifest is still seeded from local disk.
 
 ```mermaid
 flowchart TB
@@ -28,10 +28,10 @@ flowchart TB
   TG <-->|"bot API"| GW
   GW -->|"provider API · local key"| PX
   PX -->|"Bearer · refreshed OAuth"| FMA
-  SYNC <-->|"Files API · OAuth<br/>pull on boot · push on heartbeat / exit"| VOL
+  SYNC <-->|"Files API · OAuth<br/>pull + manifest seed on boot<br/>incremental push on heartbeat / exit"| VOL
 ```
 
-**Boot order:** `app/entrypoint.sh` prepares state dir and config symlink → **`sync_volume.py` pull** → **`ai_gateway_proxy.py`** (until `/healthz`) → **`npm start`** (gateway on `DATABRICKS_APP_PORT`). For auth and model routing details, see `app/ai_gateway_proxy.py`, `app/openclaw.json`, and `app/entrypoint.sh`.
+**Boot order:** `app/entrypoint.sh` prepares state dir and config symlink → **`sync_volume.py`** (pull from UC when `MY_UC_VOLUME_PATH` is set, then seed push manifest) → **`ai_gateway_proxy.py`** (until `/healthz`) → **`npm start`** (gateway on `DATABRICKS_APP_PORT`). For auth and model routing details, see `app/ai_gateway_proxy.py`, `app/openclaw.json`, and `app/entrypoint.sh`.
 
 ## Prerequisites
 
@@ -76,7 +76,7 @@ lakeclaw/
     ├── entrypoint.sh           # State dir, pull, proxy, heartbeat, gateway
     ├── openclaw.json           # Models, Telegram, gateway, skills
     ├── ai_gateway_proxy.py     # Loopback OAuth proxy → serving-endpoints / AI Gateway
-    ├── sync_volume.py          # UC Files API pull/push for .openclaw state
+    ├── sync_volume.py          # UC Files API pull; incremental push + manifest for .openclaw
     └── assets/
         └── lakeclaw-lakehouse-no-bg.png
 ```
@@ -129,11 +129,12 @@ databricks bundle deploy -var='lakeclaw_volume=/Volumes/my_catalog/my_schema/lak
 
 ## State persistence
 
-OpenClaw state lives under `/home/app/.openclaw` (`OPENCLAW_STATE_DIR`). The bound UC volume is exposed as `MY_UC_VOLUME_PATH`.
+OpenClaw state lives under `/home/app/.openclaw` (`OPENCLAW_STATE_DIR`). The bound UC volume path is `MY_UC_VOLUME_PATH` (from the bundle volume binding in `app.yaml`). Incremental push state lives in **`/home/app/.lakeclaw_push_manifest.json`** (not under `.openclaw`, so it is never uploaded to UC).
 
-- **Startup** — `app/sync_volume.py` pulls from the volume into the app home before the gateway starts.
-- **Ongoing** — `app/entrypoint.sh` runs a periodic push; **shutdown** runs a final push.
-- **Push** — Files under `.openclaw` with extensions `.md`, `.json`, `.jsonl`, `.db`, `.key`, `.yaml`. Skips `openclaw.json` and symlinks so the bundled config is not written back as content.
+- **Startup** — `app/sync_volume.py` pulls from the volume into `/home/app` when `MY_UC_VOLUME_PATH` is set, then **seeds** the push manifest from eligible local files so the next push does not re-upload unchanged bytes.
+- **Ongoing** — `app/entrypoint.sh` runs a periodic push; **shutdown** runs a final push. Each push compares `mtime_ns` and `size` to the manifest, uploads only when changed (or new), then updates the manifest; deleted local files drop manifest entries.
+- **Push scope** — Files under `.openclaw` with extensions `.md`, `.json`, `.jsonl`, `.db`, `.key`, `.yaml`. Skips `openclaw.json` and symlinks so the bundled config is not written back as file content.
+- **OAuth vs PAT in Apps** — `WorkspaceClient` is constructed with OAuth; if the runtime also sets `DATABRICKS_TOKEN`, the script temporarily removes it during client init so the SDK does not reject multiple auth methods.
 
 Model transport and Gemini path behavior are defined in `app/openclaw.json` and `app/ai_gateway_proxy.py`.
 
